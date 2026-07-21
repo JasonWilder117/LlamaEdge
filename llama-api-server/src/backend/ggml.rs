@@ -22,6 +22,17 @@ use std::{
     time::SystemTime,
 };
 
+/// Check that a user-supplied string is safe to use as a single path segment,
+/// i.e. it cannot be used to traverse outside of its parent directory.
+fn is_safe_path_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment != "."
+        && segment != ".."
+        && !segment.contains('/')
+        && !segment.contains('\\')
+        && !segment.contains('\0')
+}
+
 /// List all models available.
 pub(crate) async fn models_handler() -> Response<Body> {
     // log
@@ -570,6 +581,19 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
                     }
                 };
 
+                // reject filenames that could be used for path traversal
+                if !is_safe_path_segment(&filename) {
+                    let err_msg = format!(
+                        "Failed to upload the target file. Invalid filename: {}.",
+                        &filename
+                    );
+
+                    // log
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+
                 if !((filename).to_lowercase().ends_with(".txt")
                     || (filename).to_lowercase().ends_with(".md")
                     || (filename).to_lowercase().ends_with(".png")
@@ -707,7 +731,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
         match segments.as_slice() {
             ["", "v1", "files"] => list_files(),
             ["", "v1", "files", file_id, "content"] => {
-                if !file_id.starts_with("file_") {
+                if !file_id.starts_with("file_") || !is_safe_path_segment(file_id) {
                     let err_msg = format!("unsupported uri path: {uri_path}");
 
                     // log
@@ -719,7 +743,7 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
                 retrieve_file_content(file_id)
             }
             ["", "v1", "files", file_id] => {
-                if !file_id.starts_with("file_") {
+                if !file_id.starts_with("file_") || !is_safe_path_segment(file_id) {
                     let err_msg = format!("unsupported uri path: {uri_path}");
 
                     // log
@@ -730,7 +754,18 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
 
                 retrieve_file(file_id)
             }
-            ["", "v1", "files", "download", file_id] => download_file(file_id),
+            ["", "v1", "files", "download", file_id] => {
+                if !file_id.starts_with("file_") || !is_safe_path_segment(file_id) {
+                    let err_msg = format!("unsupported uri path: {uri_path}");
+
+                    // log
+                    error!(target: "stdout", "{}", &err_msg);
+
+                    return error::internal_server_error(err_msg);
+                }
+
+                download_file(file_id)
+            }
             _ => {
                 let err_msg = format!("unsupported uri path: {uri_path}");
 
@@ -742,6 +777,17 @@ pub(crate) async fn files_handler(req: Request<Body>) -> Response<Body> {
         }
     } else if req.method() == Method::DELETE {
         let id = req.uri().path().trim_start_matches("/v1/files/");
+
+        // validate the file id to prevent path traversal
+        if !id.starts_with("file_") || !is_safe_path_segment(id) {
+            let err_msg = format!("Invalid file id: {id}");
+
+            // log
+            error!(target: "stdout", "{}", &err_msg);
+
+            return error::internal_server_error(err_msg);
+        }
+
         let status = match llama_core::files::remove_file(id) {
             Ok(status) => status,
             Err(e) => {
@@ -1079,6 +1125,24 @@ pub(crate) async fn chunks_handler(mut req: Request<Body>) -> Response<Body> {
             return error::bad_request(err_msg);
         }
     };
+
+    // validate the archive id and filename to prevent path traversal
+    if !is_safe_path_segment(&chunks_request.id) {
+        let err_msg = format!("Invalid archive id: {}", &chunks_request.id);
+
+        // log
+        error!(target: "stdout", "{}", &err_msg);
+
+        return error::bad_request(err_msg);
+    }
+    if !is_safe_path_segment(&chunks_request.filename) {
+        let err_msg = format!("Invalid filename: {}", &chunks_request.filename);
+
+        // log
+        error!(target: "stdout", "{}", &err_msg);
+
+        return error::bad_request(err_msg);
+    }
 
     // check if the archives directory exists
     let path = Path::new("archives");

@@ -973,26 +973,27 @@ async fn handle_request(
     let root_path = path_iter.next().unwrap_or_default();
     let root_path = "/".to_owned() + root_path.to_str().unwrap_or_default();
 
-    // check if the API key is valid
-    if let Some(auth_header) = req.headers().get("authorization") {
-        if !auth_header.is_empty() {
-            let auth_header = match auth_header.to_str() {
+    // If an API key is configured, every request must present a matching key.
+    if let Some(stored_api_key) = LLAMA_API_KEY.get() {
+        let auth_header = match req.headers().get("authorization") {
+            Some(auth_header) if !auth_header.is_empty() => match auth_header.to_str() {
                 Ok(auth_header) => auth_header,
                 Err(e) => {
                     let err_msg = format!("Failed to get authorization header: {e}");
                     return Ok(error::unauthorized(err_msg));
                 }
-            };
-
-            let api_key = auth_header.split(" ").nth(1).unwrap_or_default();
-            info!(target: "stdout", "API Key: {api_key}");
-
-            if let Some(stored_api_key) = LLAMA_API_KEY.get() {
-                if api_key != stored_api_key {
-                    let err_msg = "Invalid API key.";
-                    return Ok(error::unauthorized(err_msg));
-                }
+            },
+            _ => {
+                let err_msg = "Missing API key.";
+                return Ok(error::unauthorized(err_msg));
             }
+        };
+
+        let api_key = auth_header.split(' ').nth(1).unwrap_or_default();
+
+        if api_key != stored_api_key {
+            let err_msg = "Invalid API key.";
+            return Ok(error::unauthorized(err_msg));
         }
     }
 
@@ -1003,10 +1004,12 @@ async fn handle_request(
         let version = format!("{:?}", req.version());
 
         if req.method() == hyper::http::Method::POST {
-            let size: u64 = match req.headers().get("content-length") {
-                Some(content_length) => content_length.to_str().unwrap().parse().unwrap(),
-                None => 0,
-            };
+            let size: u64 = req
+                .headers()
+                .get("content-length")
+                .and_then(|content_length| content_length.to_str().ok())
+                .and_then(|content_length| content_length.parse().ok())
+                .unwrap_or(0);
 
             info!(target: "stdout", "method: {method}, http_version: {version}, content-length: {size}");
             info!(target: "stdout", "endpoint: {path}");
@@ -1059,6 +1062,19 @@ fn static_response(path_str: &str, root: String) -> Response<Body> {
         "/" => "/index.html",
         _ => path_str,
     };
+
+    // Prevent path traversal: reject any request whose path contains a
+    // parent-directory (`..`) component so it cannot escape the web UI root.
+    if PathBuf::from(path)
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .header(header::CONTENT_TYPE, "text/plain")
+            .body(Body::from("404 Not Found"))
+            .unwrap();
+    }
 
     let mime = mime_guess::from_path(path);
 
