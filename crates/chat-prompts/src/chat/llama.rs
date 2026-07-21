@@ -1086,3 +1086,80 @@ impl BuildChatPrompt for Llama4ChatPrompt {
         Ok(prompt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use endpoints::chat::{ChatCompletionRequestMessage, ChatCompletionUserMessageContent};
+
+    fn system(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_system_message(content, None)
+    }
+
+    fn user(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_user_message(
+            ChatCompletionUserMessageContent::Text(content.to_string()),
+            None,
+        )
+    }
+
+    fn assistant(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_assistant_message(Some(content.to_string()), None, None)
+    }
+
+    #[test]
+    fn test_llama2_build_with_system_and_user() {
+        let mut messages = vec![system("You are helpful."), user("Hello")];
+        let prompt = Llama2ChatPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<s>[INST] <<SYS>>\nYou are helpful. <</SYS>>\n\nHello [/INST]"
+        );
+    }
+
+    #[test]
+    fn test_llama2_build_without_system_uses_default() {
+        let mut messages = vec![user("Hello")];
+        let prompt = Llama2ChatPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<s>[INST] <<SYS>>\nYou are a helpful, respectful and honest assistant. Always answer as short as possible, while being safe. <</SYS>>\n\nHello [/INST]"
+        );
+    }
+
+    #[test]
+    fn test_llama2_build_multiturn() {
+        let mut messages = vec![
+            system("You are helpful."),
+            user("Hello"),
+            assistant("Hi"),
+            user("How are you?"),
+        ];
+        let prompt = Llama2ChatPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<s>[INST] <<SYS>>\nYou are helpful. <</SYS>>\n\nHello [/INST] Hi </s><s>[INST] How are you? [/INST]"
+        );
+    }
+
+    #[test]
+    fn test_llama2_build_empty_messages_errors() {
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
+        assert_eq!(
+            Llama2ChatPrompt.build(&mut messages).unwrap_err(),
+            PromptError::NoMessages
+        );
+    }
+
+    #[test]
+    fn test_llama2_build_assistant_without_content_errors() {
+        let mut messages = vec![
+            user("Hello"),
+            ChatCompletionRequestMessage::new_assistant_message(None, None, None),
+        ];
+        assert_eq!(
+            Llama2ChatPrompt.build(&mut messages).unwrap_err(),
+            PromptError::NoAssistantMessage
+        );
+    }
+}

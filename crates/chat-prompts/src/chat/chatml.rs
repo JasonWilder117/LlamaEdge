@@ -704,3 +704,84 @@ impl BuildChatPrompt for ChatMLThinkPrompt {
         Ok(prompt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use endpoints::chat::{ChatCompletionRequestMessage, ChatCompletionUserMessageContent};
+
+    fn system(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_system_message(content, None)
+    }
+
+    fn user(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_user_message(
+            ChatCompletionUserMessageContent::Text(content.to_string()),
+            None,
+        )
+    }
+
+    fn assistant(content: &str) -> ChatCompletionRequestMessage {
+        ChatCompletionRequestMessage::new_assistant_message(Some(content.to_string()), None, None)
+    }
+
+    #[test]
+    fn test_chatml_build_with_system_and_user() {
+        let mut messages = vec![system("You are helpful."), user("Hello")];
+        let prompt = ChatMLPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<|im_start|>system\nYou are helpful.<|im_end|>\n<|im_start|>user\nHello<|im_end|>\n<|im_start|>assistant"
+        );
+    }
+
+    #[test]
+    fn test_chatml_build_without_system_uses_default() {
+        let mut messages = vec![user("Hello")];
+        let prompt = ChatMLPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<|im_start|>system\nAnswer as concisely as possible.<|im_end|>\n<|im_start|>user\nHello<|im_end|>\n<|im_start|>assistant"
+        );
+    }
+
+    #[test]
+    fn test_chatml_build_multiturn() {
+        let mut messages = vec![
+            system("You are helpful."),
+            user("Hello"),
+            assistant("Hi there!"),
+            user("How are you?"),
+        ];
+        let prompt = ChatMLPrompt.build(&mut messages).unwrap();
+        assert_eq!(
+            prompt,
+            "<|im_start|>system\nYou are helpful.<|im_end|>\n\
+             <|im_start|>user\nHello<|im_end|>\n\
+             <|im_start|>assistant\nHi there!<|im_end|>\n\
+             <|im_start|>user\nHow are you?<|im_end|>\n\
+             <|im_start|>assistant"
+        );
+    }
+
+    #[test]
+    fn test_chatml_build_empty_messages_errors() {
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
+        assert_eq!(
+            ChatMLPrompt.build(&mut messages).unwrap_err(),
+            PromptError::NoMessages
+        );
+    }
+
+    #[test]
+    fn test_chatml_build_assistant_without_content_errors() {
+        let mut messages = vec![
+            user("Hello"),
+            ChatCompletionRequestMessage::new_assistant_message(None, None, None),
+        ];
+        assert_eq!(
+            ChatMLPrompt.build(&mut messages).unwrap_err(),
+            PromptError::NoAssistantMessage
+        );
+    }
+}
