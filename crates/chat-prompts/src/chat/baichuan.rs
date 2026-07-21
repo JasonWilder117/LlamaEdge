@@ -1,10 +1,11 @@
 use crate::{
-    error::{PromptError, Result},
+    error::Result,
+    utils::{get_content_from_assistant_message, get_text_content_from_user_message},
     BuildChatPrompt,
 };
 use endpoints::chat::{
     ChatCompletionAssistantMessage, ChatCompletionRequestMessage, ChatCompletionSystemMessage,
-    ChatCompletionUserMessage, ChatCompletionUserMessageContent, ContentPart,
+    ChatCompletionUserMessage,
 };
 
 /// Generate prompts for the `Baichuan-2-chat` model.
@@ -23,19 +24,7 @@ impl Baichuan2ChatPrompt {
         system_prompt: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => match system_prompt.as_ref().is_empty() {
@@ -64,14 +53,7 @@ impl Baichuan2ChatPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}\n助手:{assistant_message}",

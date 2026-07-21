@@ -1,7 +1,6 @@
-use crate::{error::Result, BuildChatPrompt};
+use crate::{error::Result, utils::get_text_content_from_user_message, BuildChatPrompt};
 use endpoints::chat::{
     ChatCompletionRequestMessage, ChatCompletionSystemMessage, ChatCompletionUserMessage,
-    ChatCompletionUserMessageContent, ContentPart,
 };
 
 /// Generate prompts for the `wizard-vicuna` model.
@@ -23,19 +22,7 @@ impl WizardCoderPrompt {
         system_prompt: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         format!(
             "{system_prompt}\n\n### Instruction:\n{user_message}",

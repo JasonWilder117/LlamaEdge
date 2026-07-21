@@ -1,6 +1,6 @@
 use crate::{
     error::{PromptError, Result},
-    utils::get_image_format,
+    utils::{get_image_format, get_text_content_from_user_message},
     BuildChatPrompt,
 };
 use endpoints::chat::{
@@ -182,19 +182,7 @@ Reasoning Mode: /no_think
         system_prompt: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => match system_prompt.as_ref().is_empty() {

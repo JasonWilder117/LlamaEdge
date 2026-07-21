@@ -1,6 +1,6 @@
 use crate::{
     error::{PromptError, Result},
-    utils::get_image_format,
+    utils::{get_content_from_assistant_message, get_image_format},
     BuildChatPrompt,
 };
 use base64::{engine::general_purpose, Engine as _};
@@ -125,14 +125,7 @@ impl Qwen2vlPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}\nASSISTANT: {assistant_message}",
