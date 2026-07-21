@@ -719,3 +719,325 @@ pub trait BuildChatPrompt: Send {
         self.build(messages)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use endpoints::chat::{ChatCompletionRequestMessage, ChatCompletionUserMessageContent};
+
+    /// All prompt template variants together with the string used by both
+    /// [`FromStr`] and [`std::fmt::Display`]. The `HumanAssistant` variant is
+    /// intentionally excluded because its `Display` output (`human-asistant`)
+    /// does not match any `FromStr` key and is covered separately.
+    const ROUNDTRIP_VARIANTS: &[(PromptTemplateType, &str)] = &[
+        (PromptTemplateType::Llama2Chat, "llama-2-chat"),
+        (PromptTemplateType::Llama3Chat, "llama-3-chat"),
+        (PromptTemplateType::Llama3Tool, "llama-3-tool"),
+        (PromptTemplateType::Llama4Chat, "llama-4-chat"),
+        (PromptTemplateType::MistralInstruct, "mistral-instruct"),
+        (PromptTemplateType::MistralTool, "mistral-tool"),
+        (PromptTemplateType::MistralLite, "mistrallite"),
+        (PromptTemplateType::MistralSmallChat, "mistral-small-chat"),
+        (PromptTemplateType::MistralSmallTool, "mistral-small-tool"),
+        (PromptTemplateType::OpenChat, "openchat"),
+        (PromptTemplateType::CodeLlama, "codellama-instruct"),
+        (
+            PromptTemplateType::CodeLlamaSuper,
+            "codellama-super-instruct",
+        ),
+        (PromptTemplateType::VicunaChat, "vicuna-1.0-chat"),
+        (PromptTemplateType::Vicuna11Chat, "vicuna-1.1-chat"),
+        (PromptTemplateType::VicunaLlava, "vicuna-llava"),
+        (PromptTemplateType::ChatML, "chatml"),
+        (PromptTemplateType::ChatMLTool, "chatml-tool"),
+        (PromptTemplateType::ChatMLThink, "chatml-think"),
+        (PromptTemplateType::InternLM2Tool, "internlm-2-tool"),
+        (PromptTemplateType::Baichuan2, "baichuan-2"),
+        (PromptTemplateType::WizardCoder, "wizard-coder"),
+        (PromptTemplateType::Zephyr, "zephyr"),
+        (PromptTemplateType::StableLMZephyr, "stablelm-zephyr"),
+        (PromptTemplateType::IntelNeural, "intel-neural"),
+        (PromptTemplateType::DeepseekChat, "deepseek-chat"),
+        (PromptTemplateType::DeepseekCoder, "deepseek-coder"),
+        (PromptTemplateType::DeepseekChat2, "deepseek-chat-2"),
+        (PromptTemplateType::DeepseekChat25, "deepseek-chat-25"),
+        (PromptTemplateType::DeepseekChat3, "deepseek-chat-3"),
+        (PromptTemplateType::SolarInstruct, "solar-instruct"),
+        (PromptTemplateType::Phi2Chat, "phi-2-chat"),
+        (PromptTemplateType::Phi2Instruct, "phi-2-instruct"),
+        (PromptTemplateType::Phi3Chat, "phi-3-chat"),
+        (PromptTemplateType::Phi3Instruct, "phi-3-instruct"),
+        (PromptTemplateType::Phi4Chat, "phi-4-chat"),
+        (PromptTemplateType::GemmaInstruct, "gemma-instruct"),
+        (PromptTemplateType::Gemma3, "gemma-3"),
+        (PromptTemplateType::Octopus, "octopus"),
+        (PromptTemplateType::Glm4Chat, "glm-4-chat"),
+        (PromptTemplateType::GroqLlama3Tool, "groq-llama3-tool"),
+        (PromptTemplateType::BreezeInstruct, "mediatek-breeze"),
+        (PromptTemplateType::NemotronChat, "nemotron-chat"),
+        (PromptTemplateType::NemotronTool, "nemotron-tool"),
+        (PromptTemplateType::FunctionaryV32, "functionary-32"),
+        (PromptTemplateType::FunctionaryV31, "functionary-31"),
+        (PromptTemplateType::MiniCPMV, "minicpmv"),
+        (PromptTemplateType::MoxinChat, "moxin-chat"),
+        (PromptTemplateType::MoxinInstruct, "moxin-instruct"),
+        (PromptTemplateType::Falcon3, "falcon3"),
+        (PromptTemplateType::Megrez, "megrez"),
+        (PromptTemplateType::Qwen2vl, "qwen2-vision"),
+        (PromptTemplateType::Qwen3NoThink, "qwen3-no-think"),
+        (PromptTemplateType::Qwen3Agent, "qwen3-agent"),
+        (PromptTemplateType::ExaoneDeepChat, "exaone-deep-chat"),
+        (PromptTemplateType::ExaoneChat, "exaone-chat"),
+        (PromptTemplateType::SeedInstruct, "seed-instruct"),
+        (PromptTemplateType::SeedReasoning, "seed-reasoning"),
+        (PromptTemplateType::SeedOssThink, "seed-oss-think"),
+        (PromptTemplateType::SeedOssNoThink, "seed-oss-no-think"),
+        (PromptTemplateType::Smolvl, "smol-vision"),
+        (PromptTemplateType::Smol3NoThink, "smol3-no-think"),
+        (PromptTemplateType::GptOss, "gpt-oss"),
+        (PromptTemplateType::Embedding, "embedding"),
+        (PromptTemplateType::Tts, "tts"),
+        (PromptTemplateType::Null, "none"),
+    ];
+
+    #[test]
+    fn test_prompt_template_display_from_str_roundtrip() {
+        for (variant, name) in ROUNDTRIP_VARIANTS {
+            // Display produces the expected string.
+            assert_eq!(&variant.to_string(), name, "Display mismatch for {name}");
+            // FromStr parses the string back to the same variant.
+            assert_eq!(
+                <PromptTemplateType as FromStr>::from_str(name).unwrap(),
+                *variant,
+                "FromStr mismatch for {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_prompt_template_from_str_aliases() {
+        // Both `belle-llama-2-chat` and `human-assistant` map to `HumanAssistant`.
+        assert_eq!(
+            <PromptTemplateType as FromStr>::from_str("belle-llama-2-chat").unwrap(),
+            PromptTemplateType::HumanAssistant
+        );
+        assert_eq!(
+            <PromptTemplateType as FromStr>::from_str("human-assistant").unwrap(),
+            PromptTemplateType::HumanAssistant
+        );
+    }
+
+    #[test]
+    fn test_prompt_template_from_str_unknown() {
+        let err = <PromptTemplateType as FromStr>::from_str("does-not-exist").unwrap_err();
+        assert_eq!(
+            err,
+            error::PromptError::UnknownPromptTemplateType("does-not-exist".to_string())
+        );
+    }
+
+    #[test]
+    fn test_has_system_prompt() {
+        assert!(PromptTemplateType::Llama3Chat.has_system_prompt());
+        assert!(PromptTemplateType::ChatML.has_system_prompt());
+        assert!(!PromptTemplateType::MistralInstruct.has_system_prompt());
+        assert!(!PromptTemplateType::GemmaInstruct.has_system_prompt());
+        assert!(!PromptTemplateType::Null.has_system_prompt());
+    }
+
+    #[test]
+    fn test_is_image_supported() {
+        for variant in [
+            PromptTemplateType::MiniCPMV,
+            PromptTemplateType::Qwen2vl,
+            PromptTemplateType::VicunaLlava,
+            PromptTemplateType::Gemma3,
+            PromptTemplateType::Smolvl,
+        ] {
+            assert!(
+                variant.is_image_supported(),
+                "{variant} should support images"
+            );
+        }
+
+        for variant in [
+            PromptTemplateType::Llama3Chat,
+            PromptTemplateType::ChatML,
+            PromptTemplateType::MistralInstruct,
+        ] {
+            assert!(
+                !variant.is_image_supported(),
+                "{variant} should not support images"
+            );
+        }
+    }
+
+    #[test]
+    fn test_chat_prompt_from_template_type() {
+        // Every template that maps to a concrete builder must not panic.
+        for (variant, _) in ROUNDTRIP_VARIANTS {
+            match variant {
+                // These variants intentionally panic and are covered separately.
+                PromptTemplateType::Embedding
+                | PromptTemplateType::Tts
+                | PromptTemplateType::Null => continue,
+                other => {
+                    let _prompt: ChatPrompt = (*other).into();
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_chat_prompt_from_embedding_panics() {
+        let _prompt: ChatPrompt = PromptTemplateType::Embedding.into();
+    }
+
+    #[test]
+    fn test_merge_rag_context_policy_display_and_from_str() {
+        assert_eq!(
+            MergeRagContextPolicy::SystemMessage.to_string(),
+            "system-message"
+        );
+        assert_eq!(
+            MergeRagContextPolicy::LastUserMessage.to_string(),
+            "last-user-message"
+        );
+        assert_eq!(
+            <MergeRagContextPolicy as FromStr>::from_str("system-message").unwrap(),
+            MergeRagContextPolicy::SystemMessage
+        );
+        assert_eq!(
+            <MergeRagContextPolicy as FromStr>::from_str("last-user-message").unwrap(),
+            MergeRagContextPolicy::LastUserMessage
+        );
+        assert_eq!(
+            <MergeRagContextPolicy as FromStr>::from_str("bogus").unwrap_err(),
+            error::PromptError::UnknownMergeRagContextPolicy("bogus".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_rag_context_policy_default() {
+        assert_eq!(
+            MergeRagContextPolicy::default(),
+            MergeRagContextPolicy::SystemMessage
+        );
+    }
+
+    struct DefaultRagMerger;
+    impl MergeRagContext for DefaultRagMerger {}
+
+    #[test]
+    fn test_merge_rag_context_updates_existing_system_message() {
+        let mut messages = vec![
+            ChatCompletionRequestMessage::new_system_message("You are helpful.", None),
+            ChatCompletionRequestMessage::new_user_message(
+                ChatCompletionUserMessageContent::Text("Hi".to_string()),
+                None,
+            ),
+        ];
+
+        DefaultRagMerger::build(
+            &mut messages,
+            &["Some context.".to_string()],
+            true,
+            MergeRagContextPolicy::SystemMessage,
+            None,
+        )
+        .unwrap();
+
+        // Still two messages; the first is the merged system message.
+        assert_eq!(messages.len(), 2);
+        match &messages[0] {
+            ChatCompletionRequestMessage::System(sys) => {
+                assert!(sys.content().starts_with("You are helpful."));
+                assert!(sys.content().contains("Some context."));
+            }
+            other => panic!("expected system message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_merge_rag_context_inserts_system_message() {
+        let mut messages = vec![ChatCompletionRequestMessage::new_user_message(
+            ChatCompletionUserMessageContent::Text("Hi".to_string()),
+            None,
+        )];
+
+        DefaultRagMerger::build(
+            &mut messages,
+            &["Some context.".to_string()],
+            true,
+            MergeRagContextPolicy::SystemMessage,
+            Some("Use this:".to_string()),
+        )
+        .unwrap();
+
+        // A new system message is inserted at the front.
+        assert_eq!(messages.len(), 2);
+        match &messages[0] {
+            ChatCompletionRequestMessage::System(sys) => {
+                assert!(sys.content().contains("Use this:"));
+                assert!(sys.content().contains("Some context."));
+            }
+            other => panic!("expected system message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_merge_rag_context_errors_on_empty_context() {
+        let mut messages = vec![ChatCompletionRequestMessage::new_user_message(
+            ChatCompletionUserMessageContent::Text("Hi".to_string()),
+            None,
+        )];
+
+        let err = DefaultRagMerger::build(
+            &mut messages,
+            &[],
+            true,
+            MergeRagContextPolicy::SystemMessage,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            error::PromptError::Operation("No context provided.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_rag_context_errors_on_no_messages() {
+        let mut messages: Vec<ChatCompletionRequestMessage> = vec![];
+        let err = DefaultRagMerger::build(
+            &mut messages,
+            &["ctx".to_string()],
+            true,
+            MergeRagContextPolicy::SystemMessage,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err, error::PromptError::NoMessages);
+    }
+
+    #[test]
+    fn test_merge_rag_context_noop_without_system_prompt() {
+        // When the template has no system prompt, the default policy is a no-op.
+        let mut messages = vec![ChatCompletionRequestMessage::new_user_message(
+            ChatCompletionUserMessageContent::Text("Hi".to_string()),
+            None,
+        )];
+
+        DefaultRagMerger::build(
+            &mut messages,
+            &["ctx".to_string()],
+            false,
+            MergeRagContextPolicy::SystemMessage,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(messages.len(), 1);
+    }
+}

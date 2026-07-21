@@ -36,3 +36,37 @@ pub fn get_image_format(base64_str: &str) -> Result<String> {
 
     Ok(image_format)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 1x1 pixel images encoded as base64.
+    const PNG_1X1: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+    const GIF_1X1: &str = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+    #[test]
+    fn test_get_image_format_png() {
+        assert_eq!(get_image_format(PNG_1X1).unwrap(), "png");
+    }
+
+    #[test]
+    fn test_get_image_format_gif() {
+        assert_eq!(get_image_format(GIF_1X1).unwrap(), "gif");
+    }
+
+    #[test]
+    fn test_get_image_format_invalid_base64() {
+        // `!!!` is not valid base64.
+        let err = get_image_format("!!!").unwrap_err();
+        assert!(matches!(err, PromptError::Operation(_)));
+    }
+
+    #[test]
+    fn test_get_image_format_unsupported() {
+        // Valid base64 but not a recognizable image format.
+        let not_an_image = base64::engine::general_purpose::STANDARD.encode("not an image");
+        let err = get_image_format(&not_an_image).unwrap_err();
+        assert!(matches!(err, PromptError::Operation(_)));
+    }
+}
