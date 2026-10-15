@@ -1,7 +1,50 @@
 use crate::error::{PromptError, Result};
 use base64::{engine::general_purpose, Engine as _};
+use endpoints::chat::{
+    ChatCompletionAssistantMessage, ChatCompletionUserMessage, ChatCompletionUserMessageContent,
+    ContentPart,
+};
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
+
+/// Extract the text content from a user message.
+///
+/// If the message content is a single text value, it is returned as-is. If it
+/// is a list of parts, the text of each [`ContentPart::Text`] part is
+/// concatenated (each followed by a newline) and non-text parts are ignored.
+pub fn get_text_content_from_user_message(message: &ChatCompletionUserMessage) -> String {
+    match message.content() {
+        ChatCompletionUserMessageContent::Text(text) => text.to_string(),
+        ChatCompletionUserMessageContent::Parts(parts) => {
+            let mut content = String::new();
+            for part in parts {
+                if let ContentPart::Text(text_content) = part {
+                    content.push_str(text_content.text());
+                    content.push('\n');
+                }
+            }
+            content
+        }
+    }
+}
+
+/// Extract the content from an assistant message.
+///
+/// The content of an assistant message is optional when `tool_calls` is
+/// specified. In that case an empty string is returned; otherwise a
+/// [`PromptError::NoAssistantMessage`] error is returned.
+pub fn get_content_from_assistant_message(
+    message: &ChatCompletionAssistantMessage,
+) -> Result<String> {
+    match message.content() {
+        Some(content) => Ok(content.to_string()),
+        // Note that the content is optional if `tool_calls` is specified.
+        None => match message.tool_calls().is_some() {
+            true => Ok(String::new()),
+            false => Err(PromptError::NoAssistantMessage),
+        },
+    }
+}
 
 /// Get the image format from a base64-encoded image string.
 pub fn get_image_format(base64_str: &str) -> Result<String> {

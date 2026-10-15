@@ -1,11 +1,11 @@
 use crate::{
     error::{PromptError, Result},
+    utils::{get_content_from_assistant_message, get_text_content_from_user_message},
     BuildChatPrompt,
 };
 use endpoints::chat::{
     ChatCompletionAssistantMessage, ChatCompletionRequestMessage, ChatCompletionSystemMessage,
-    ChatCompletionToolMessage, ChatCompletionUserMessage, ChatCompletionUserMessageContent,
-    ContentPart, Tool,
+    ChatCompletionToolMessage, ChatCompletionUserMessage, Tool,
 };
 
 /// Generate prompts for the `Mistral-instruct` model.
@@ -18,19 +18,7 @@ impl MistralInstructPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => format!(
@@ -51,14 +39,7 @@ impl MistralInstructPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}{assistant_message}</s>",
@@ -101,19 +82,7 @@ impl MistralLitePrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => format!(
@@ -134,14 +103,7 @@ impl MistralLitePrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}<|assistant|>{assistant_message}</s>",
@@ -187,19 +149,7 @@ impl MistralToolPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => format!(
@@ -222,19 +172,7 @@ impl MistralToolPrompt {
         tools: Option<&[Tool]>,
         last_user_message: bool,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => match last_user_message {
@@ -292,14 +230,7 @@ impl MistralToolPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         let content = content.split("\n").next().unwrap_or_default();
 
@@ -401,19 +332,7 @@ impl MistralSmallChatPrompt {
         system_prompt: impl AsRef<str>,
         message: &ChatCompletionUserMessage,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => format!(
@@ -435,14 +354,7 @@ impl MistralSmallChatPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}{assistant_message}</s>",
@@ -503,19 +415,7 @@ impl MistralSmallToolPrompt {
         tools: Option<&[Tool]>,
         last_user_message: bool,
     ) -> String {
-        let content = match message.content() {
-            ChatCompletionUserMessageContent::Text(text) => text.to_string(),
-            ChatCompletionUserMessageContent::Parts(parts) => {
-                let mut content = String::new();
-                for part in parts {
-                    if let ContentPart::Text(text_content) = part {
-                        content.push_str(text_content.text());
-                        content.push('\n');
-                    }
-                }
-                content
-            }
-        };
+        let content = get_text_content_from_user_message(message);
 
         match chat_history.as_ref().is_empty() {
             true => match last_user_message {

@@ -1,5 +1,6 @@
 use crate::{
     error::{PromptError, Result},
+    utils::get_content_from_assistant_message,
     BuildChatPrompt,
 };
 use base64::{engine::general_purpose, Engine as _};
@@ -114,14 +115,7 @@ impl MiniCPMVPrompt {
         chat_history: impl AsRef<str>,
         message: &ChatCompletionAssistantMessage,
     ) -> Result<String> {
-        let content = match message.content() {
-            Some(content) => content.to_string(),
-            // Note that the content is optional if `tool_calls` is specified.
-            None => match message.tool_calls().is_some() {
-                true => String::new(),
-                false => return Err(PromptError::NoAssistantMessage),
-            },
-        };
+        let content = get_content_from_assistant_message(message)?;
 
         Ok(format!(
             "{chat_history}\n<|im_start|>assistant\n{assistant_message}<|im_end|>",
