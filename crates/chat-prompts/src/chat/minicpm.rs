@@ -159,18 +159,15 @@ impl BuildChatPrompt for MiniCPMVPrompt {
 }
 
 fn is_image_format(base64_str: &str) -> Result<String> {
-    let image_data = match general_purpose::STANDARD.decode(base64_str) {
-        Ok(data) => data,
-        Err(_) => {
-            return Err(PromptError::Operation(
-                "Failed to decode base64 string.".to_string(),
-            ))
-        }
-    };
+    let image_data = general_purpose::STANDARD.decode(base64_str).map_err(|e| {
+        PromptError::Operation(format!("Failed to decode base64 string. Reason: {e}"))
+    })?;
 
     let format = ImageReader::new(Cursor::new(image_data))
         .with_guessed_format()
-        .unwrap()
+        .map_err(|e| {
+            PromptError::Operation(format!("Failed to guess the image format. Reason: {e}"))
+        })?
         .format();
 
     let image_format = match format {
